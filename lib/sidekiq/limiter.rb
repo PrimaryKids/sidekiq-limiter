@@ -9,13 +9,12 @@ module Sidekiq
         DEFAULT_INTERVAL = 5
 
         def initialize(options = {})
-          @queue = options[:queue] || Sidekiq.options[:limiter]
+          @queues = Sidekiq.options[:process_limits]
           @interval = options.fetch(:interval, DEFAULT_INTERVAL)
         end
 
         def call(worker, msg, queue)
-          puts "@queue = #{@queue} #{queue} #{queue == @queue} #{!can_start?}"
-          if queue == @queue && !can_start?
+          if @queues[queue] && is_busy?
             Sidekiq::Client.push('queue' => queue, 'class' => worker.class.name, 'args' => msg['args'],
                                  'at' => (Time.now + @interval).to_f)
           else
@@ -23,7 +22,7 @@ module Sidekiq
           end
         end
 
-        def can_start?
+        def is_busy?
           Sidekiq.redis do |conn|
             workers_count = conn.smembers('workers').count do |w|
               next unless w =~ /^#{hostname}/
@@ -32,10 +31,10 @@ module Sidekiq
               next unless options
 
               options = Sidekiq.load_json(options)
-              options['queue'] == @queue
+              @queues[options['queue']]
             end
 
-            workers_count < 2
+            workers_count >= 2
           end
         end
       end
