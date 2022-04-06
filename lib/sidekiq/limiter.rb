@@ -1,4 +1,5 @@
 require 'sidekiq/limiter/version'
+require 'sidekiq/util'
 
 module Sidekiq
   module Middleware
